@@ -65,8 +65,7 @@ public class Application {
         }
 
         try {
-            String properties = "C:\\lopparser\\application.properties";
-            //String properties = args.length > 0 && args[0] != null ? args[0] : PROPERTIES;
+            String properties = args.length > 0 && args[0] != null ? args[0] : PROPERTIES;
             new Application(properties).run();
         } catch (Exception ex) {
             System.err.println(ex.getMessage());
@@ -89,41 +88,39 @@ public class Application {
     }
 
     /**
-     * Ищем куски текста в интервале
+     * find text blocks in the interval
      */
     private void findAllInInterval() {
         List<File> logFiles = extractFilesFromFolder(logPath);
         System.out.println("Found " + logFiles.size() + " files for search");
         AtomicInteger resultCounter = new AtomicInteger(0);
-        // ищем куски в диапазоне
         logFiles.parallelStream().forEach(file -> {
             try {
-                // выходной путь до файла повторяет оригинальный путь
                 Path pathFile = Paths.get(outPath + File.separator + file.getPath());
-                // создаем каталог для хранения
+                // folder for storage
                 File resultFolder = getResultFolder(pathFile.toString()
                         .replaceFirst(outPath, "")
                         .replaceFirst(file.getName(), ""));
-                // получаем реальный путь до файла
+                // get real file path
                 pathFile = Paths.get(resultFolder.getPath() + File.separator + file.getName());
-                // удаляем старые файлы
+                // delete old data
                 if (Files.exists(pathFile)) {
                     Files.delete(pathFile);
                 }
 
                 try (FileWriter fileWriter = new FileWriter(pathFile.toFile())) {
                     for (String row : new String(Files.readAllBytes(file.toPath())).split("\n")) {
-                        // проверяем дату
+                        // check date
                         Date rowDate = getRowDate(row);
                         if (rowDate.after(dateStart) && rowDate.before(dateEnd)) {
-                            // пишем сразу в файл
+                            // write to file
                             fileWriter.write(row);
                             fileWriter.write("\n");
                         }
                     }
                 }
 
-                // считаем записанный файл
+                // count file that we wrote
                 if (pathFile.toFile().exists() && pathFile.toFile().isFile()) {
                     resultCounter.incrementAndGet();
                 }
@@ -136,22 +133,17 @@ public class Application {
     }
 
     /**
-     * Ищем транзакции и сохраняем результаты
+     * find transactions and save results
      */
     private void findAllAndExtract() {
         List<File> logFiles = extractFilesFromFolder(logPath);
         System.out.println("Found " + logFiles.size() + " files for search");
         Map<String, AtomicInteger> resultCounter = new ConcurrentHashMap<>();
         logFiles.parallelStream().forEach(file -> {
-            ////////////////////////////
-            Integer logLevel = findLogLevelInFile(file);
-            ///////////////////////////////////////////
             try {
                 findData(new String(Files.readAllBytes(file.toPath()))).forEach((utrnno, dataBlock) -> {
                     if (dataBlock != null && !dataBlock.isEmpty()) {
-                        //////////////////////////////////////////////
-                        saveDataBlock(file.getName(), utrnno, dataBlock, logLevel);
-                        ///////////////////////////////////////////////////
+                        saveDataBlock(file.getName(), utrnno, dataBlock);
                         resultCounter.put(utrnno, new AtomicInteger(
                                 resultCounter
                                         .getOrDefault(utrnno, new AtomicInteger(0))
@@ -168,7 +160,7 @@ public class Application {
     }
 
     /**
-     * Ищем заданный UTRNNO и сохраняем результаты
+     * find specific UTTRNO and save results
      */
     private void findByUTRNNOAndExtract() {
         List<File> logFiles = extractFilesFromFolder(logPath);
@@ -177,14 +169,9 @@ public class Application {
         AtomicInteger resultCounter = new AtomicInteger(0);
         logFiles.parallelStream().forEach(file -> {
             try {
-                ////////////////////////////////////
-                Integer logLevel = findLogLevelInFile(file);
-                //////////////////////////////////////////
                 String dataBlock = findData(new String(Files.readAllBytes(file.toPath())), utrnno).get(utrnno);
                 if (dataBlock != null && !dataBlock.isEmpty()) {
-                    //////////////////////////////////////
-                    saveDataBlock(file.getName(), utrnno, dataBlock, logLevel);
-                    ///////////////////////////////////////
+                    saveDataBlock(file.getName(), utrnno, dataBlock);
                     resultCounter.incrementAndGet();
                 }
             } catch (IOException ex) {
@@ -198,7 +185,7 @@ public class Application {
     }
 
     /**
-     * Архивация результата работы
+     * archive results
      */
     private void zip() {
         System.out.println("******************* ZIP ********************");
@@ -210,9 +197,9 @@ public class Application {
     }
 
     /**
-     * Получение даты для текущей строки
+     * get date for the current raw
      *
-     * @param row строка текста
+     * @param row text raw
      * @return {@link Date}
      */
     private Date getRowDate(String row) {
@@ -231,9 +218,9 @@ public class Application {
     }
 
     /**
-     * Рекурсивно извлекаем все файлы из пути
+     * recursively extract all files from the path
      *
-     * @param path путь до каталога
+     * @param path
      * @return лист {@link List} файлов
      */
     private List<File> extractFilesFromFolder(String path) {
@@ -263,19 +250,19 @@ public class Application {
     }
 
     /**
-     * Сохранение найденной информации о транзакции
+     * save info about transactions that was found
      *
-     * @param source    источник в которм найдена информация
-     * @param utrnno    номер транакции
-     * @param dataBlock найденный данные
+     * @param source    source of info
+     * @param utrnno    number of transaction
+     * @param dataBlock data
      */
-    private void saveDataBlock(String source, String utrnno, String dataBlock, Integer logLevel) {
-        // получаем папку для сохранения
+    private void saveDataBlock(String source, String utrnno, String dataBlock) {
+        // get folder for storage
         File resultFolder = getResultFolder(utrnno);
-        // записываем результаты
+        // write results
         try {
             Path pathFile = Paths.get(resultFolder.getPath() + File.separator
-                    + source + "_" + DATE_NAME_FORMAT.format(dateStart) + "_" + DATE_NAME_FORMAT.format(dateEnd) + "_" + logLevel);
+                    + source + "_" + DATE_NAME_FORMAT.format(dateStart) + "_" + DATE_NAME_FORMAT.format(dateEnd));
             if (Files.exists(pathFile)) {
                 Files.delete(pathFile);
             }
@@ -286,16 +273,15 @@ public class Application {
     }
 
     /**
-     * Создаем каталог для сохранения результатов
+     * create folder to store results
      *
-     * @param path номер транзакции или просто пас для идентификации каталога
-     * @return {@link} каталог для сохранения результатов
+     * @param path number of trans or just path to identify folder
+     * @return {@link} folder to store results
      */
     private File getResultFolder(String path) {
         File resultFolder = new File(outPath + File.separator + path);
         synchronized (folderWriteMonitor) {
             if (!resultFolder.exists() || !resultFolder.isDirectory()) {
-                // Создаем каталог для сохранения результатов
                 if (!resultFolder.mkdir() && !resultFolder.mkdirs()) {
                     System.err.println("Failed mkdir: " + resultFolder.getPath());
                 }
@@ -306,9 +292,9 @@ public class Application {
     }
 
     /**
-     * Поиск блоков данных содержащих тразакции
+     * search blocks of data with trans
      *
-     * @param content контент для поиска
+     * @param content content for search
      * @return {@link Map} (utrrnno, block)
      */
     private Map<String, String> findData(String content) {
@@ -316,9 +302,9 @@ public class Application {
     }
 
     /**
-     * Поиск блоков данных содержащих utrnno
+     * search data blocks with utrnno
      *
-     * @param content контент для поиска
+     * @param content content for search
      * @return {@link Map} (utrrnno, block)
      */
     private Map<String, String> findData(String content, String utrnno) {
@@ -329,11 +315,11 @@ public class Application {
         for (int currPos = 0; currPos < rows.length; currPos++) {
             String row = rows[currPos];
 
-            // проверяем дату
+            // check date
             Date rowDate = getRowDate(row);
             if (!rowDate.after(dateStart) && !rowDate.before(dateEnd)) continue;
 
-            // определям какую транзакцию искать
+            // determine a trans that we want to find
             String searchUtrnno = null;
             if (utrnno == null || utrnno.isEmpty()) {
                 Matcher matcher = UTTRNO.matcher(row);
@@ -375,10 +361,10 @@ public class Application {
     }
 
     /**
-     * Упаковывает file в ZIP и сохраянет на диск
+     * zip package
      *
      * @param pathDestination File
-     * @throws IOException возможно при ошибке чтения/записи на диск
+     * @throws IOException disk error
      */
     private void saveFileToZIPArchive(String pathDestination) throws IOException {
         System.out.println("Start create ZIP-archive");
@@ -421,42 +407,12 @@ public class Application {
             System.out.println(path + " created");
         }
 
-        // очищаем запакованные данные
+        // clear folder with data after package
         if (file.isDirectory()) {
             extractFilesFromFolder(file.getPath()).parallelStream().forEach(File::delete);
         } else {
             file.delete();
         }
         System.out.println("Clear result files");
-    }
-
-    /**
-     * Метод, проверяющий файл на уровень логирования и выдающий значение,
-     * соответствующее этому уровню
-     */
-
-    public int findLogLevelInFile(File file) {
-        int groupID = 0;
-        try {
-            BufferedReader br = new BufferedReader(new FileReader(file));
-            String nextLine;
-            while ((nextLine = br.readLine()) != null) {
-                List<String> listTokens = Arrays.asList(nextLine.split(" "));
-                for (String token : listTokens) {
-                    if (token.equals("df"))
-                        groupID = 1;
-                    else if (token.equals("fg"))
-                        groupID = 2;
-                    else if (token.equals("gh"))
-                        groupID = 3;
-                    else if (token.equals("hj"))
-                        groupID = 4;
-                    //Matcher matcher = LOG_LEVEL.matcher(token);
-                }
-            }
-        } catch (IOException ex) {
-            System.err.println("Failed read file: " + ex.getMessage());
-        }
-        return groupID;
     }
 }
